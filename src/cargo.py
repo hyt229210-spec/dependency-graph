@@ -1,5 +1,6 @@
 """Получение прямых зависимостей пакета Rust (Cargo) из репозитория GitHub."""
 import urllib.error
+import time
 import urllib.request
 
 try:
@@ -9,13 +10,18 @@ except ImportError:  # Python старше 3.11
 
 GITHUB_PREFIX = "https://github.com/"
 RAW_HOST = "https://raw.githubusercontent.com"
-TIMEOUT_SECONDS = 15
+TIMEOUT_SECONDS = 30
+RETRY_COUNT = 3
+RETRY_PAUSE_SECONDS = 2
 HTTP_NOT_FOUND = 404
 MIN_REPO_PARTS = 2
 
 
 class CargoError(Exception):
     """Ошибка получения или разбора данных о пакете."""
+
+class PackageNotFound(CargoError):
+    """Пакета нет в этом репозитории."""
 
 
 def raw_url(repository, file_path):
@@ -29,8 +35,8 @@ def raw_url(repository, file_path):
     return f"{RAW_HOST}/{parts[0]}/{parts[1]}/HEAD/{file_path}"
 
 
-def fetch_text(url):
-    """Скачивает текстовый файл по ссылке. Если файла нет, возвращает None."""
+def download(url):
+    """Одна попытка скачать файл. Если файла нет (404), возвращает None."""
     try:
         with urllib.request.urlopen(url, timeout=TIMEOUT_SECONDS) as response:
             return response.read().decode("utf-8")
@@ -38,8 +44,19 @@ def fetch_text(url):
         if error.code == HTTP_NOT_FOUND:
             return None
         raise CargoError(f"Ошибка загрузки ({error.code}): {url}")
-    except (urllib.error.URLError, TimeoutError) as error:
-        raise CargoError(f"Нет доступа к сети: {error}")
+
+
+def fetch_text(url):
+    """Скачивает текстовый файл по ссылке. При сбое сети повторяет попытку."""
+    last_error = None
+    for attempt in range(RETRY_COUNT):
+        if attempt:
+            time.sleep(RETRY_PAUSE_SECONDS)
+        try:
+            return download(url)
+        except OSError as error:
+            last_error = error
+    raise CargoError(f"Нет доступа к сети (попыток: {RETRY_COUNT}): {last_error}")
 
 
 def parse_manifest(text):
@@ -81,4 +98,4 @@ def find_direct_dependencies(repository, package_name):
         manifest = parse_manifest(text)
         if manifest.get("package", {}).get("name") == package_name:
             return direct_dependencies(manifest)
-    raise CargoError(f"Cargo.toml пакета '{package_name}' не найден в репозитории")
+        raise PackageNotFound(f"Cargo.toml пакета '{package_name}' не найден в репозитории")
