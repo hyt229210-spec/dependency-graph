@@ -1,0 +1,8 @@
+{
+    "package_name": "A",
+    "repository": "tests/data/basic.txt",
+    "test_mode": true,
+    "ascii_tree": false,
+    "max_depth": 3,
+    "filter_substring": ""
+}
