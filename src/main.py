@@ -5,7 +5,9 @@ import sys
 from cargo import CargoError, PackageNotFound, find_direct_dependencies
 from config import ConfigError, load_config
 from graph import build_graph, format_graph, invert_repo
+from render import RenderError, render_png, save_text, show_image
 from testrepo import TestRepoError, load_test_repo
+from visual import format_tree, to_plantuml
 
 
 def parse_args():
@@ -23,6 +25,15 @@ def parse_args():
         "--reverse",
         action="store_true",
         help="вывести обратные зависимости (только для тестового режима)",
+    )
+    parser.add_argument(
+        "--image", action="store_true", help="построить и показать изображение графа"
+    )
+    parser.add_argument(
+        "--jar", default="tools/plantuml.jar", help="путь к plantuml.jar"
+    )
+    parser.add_argument(
+        "--out", default="output/graph.puml", help="куда сохранить описание PlantUML"
     )
     return parser.parse_args()
 
@@ -68,15 +79,15 @@ def make_real_getter(settings):
     return getter
 
 
-def run(settings, reverse):
-    """Строит граф по настройкам и печатает его."""
-    if reverse and not settings["test_mode"]:
+def run(settings, args):
+    """Строит граф по настройкам, печатает его и при необходимости рисует."""
+    if args.reverse and not settings["test_mode"]:
         raise ConfigError(
             "Режим --reverse работает только при test_mode = true: "
             "для настоящего репозитория нет списка всех пакетов"
         )
     if settings["test_mode"]:
-        getter = make_test_getter(settings, reverse)
+        getter = make_test_getter(settings, args.reverse)
     else:
         getter = make_real_getter(settings)
     graph = build_graph(
@@ -85,11 +96,14 @@ def run(settings, reverse):
         settings["max_depth"],
         settings["filter_substring"],
     )
-    print_result(graph, settings["package_name"], reverse)
+    print_result(graph, settings, args.reverse)
+    if args.image:
+        visualize(graph, args)
 
 
-def print_result(graph, package, reverse):
-    """Печатает граф зависимостей или обратные зависимости."""
+def print_result(graph, settings, reverse):
+    """Печатает граф зависимостей (или обратные зависимости) и, если нужно, дерево."""
+    package = settings["package_name"]
     if reverse:
         print(f"Обратные зависимости пакета {package} (кто от него зависит):")
         lines = format_graph(graph, "<-", "(от него никто не зависит)")
@@ -98,6 +112,21 @@ def print_result(graph, package, reverse):
         lines = format_graph(graph)
     for line in lines:
         print(f"  {line}")
+    if settings["ascii_tree"]:
+        print("\nASCII-дерево:")
+        for line in format_tree(graph, package):
+            print(f"  {line}")
+
+
+def visualize(graph, args):
+    """Формирует описание PlantUML, строит изображение и показывает его."""
+    puml_text = to_plantuml(graph, args.reverse)
+    print("\nОписание графа на языке PlantUML:")
+    print(puml_text)
+    puml_path = save_text(puml_text, args.out)
+    png_path = render_png(puml_path, args.jar)
+    print(f"\nИзображение сохранено: {png_path}")
+    show_image(png_path)
 
 
 def main():
@@ -107,12 +136,15 @@ def main():
         settings = load_config(args.config)
         if args.show_config:
             print_settings(settings)
-        run(settings, args.reverse)
+        run(settings, args)
     except ConfigError as error:
         print(f"Ошибка конфигурации: {error}")
         return 1
     except (CargoError, TestRepoError) as error:
         print(f"Ошибка получения данных: {error}")
+        return 1
+    except RenderError as error:
+        print(f"Ошибка визуализации: {error}")
         return 1
     return 0
 
