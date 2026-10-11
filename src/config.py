@@ -68,7 +68,9 @@ def _check_depth(value):
     if isinstance(value, bool) or not isinstance(value, int):
         raise ConfigError("Параметр 'max_depth' должен быть целым числом")
     if value < MIN_DEPTH:
-        raise ConfigError(f"Параметр 'max_depth' должен быть не меньше {MIN_DEPTH}")
+        raise ConfigError(
+            f"Параметр 'max_depth' должен быть не меньше {MIN_DEPTH}"
+        )
 
 
 def _check_repository(value, test_mode):
@@ -77,4 +79,6 @@ def _check_repository(value, test_mode):
         if not os.path.isfile(value):
             raise ConfigError(f"Файл тестового репозитория не найден: {value}")
     elif not value.startswith(("http://", "https://")):
-        raise ConfigError("Параметр 'repository' должен быть URL (http:// или https://)")
+        raise ConfigError(
+            "Параметр 'repository' должен быть URL (http:// или https://)"
+        )

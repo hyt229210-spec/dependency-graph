@@ -18,7 +18,7 @@ DEPTH = 10
 
 
 def visualize_package(repo, package):
-    """Печатает ASCII-дерево и PlantUML для пакета, затем показывает картинку."""
+    """Печатает дерево и PlantUML для пакета, затем показывает картинку."""
     graph = build_graph(lambda name: repo.get(name, []), package, DEPTH, "")
     print(f"\n=== Пакет {package}")
     print("ASCII-дерево:")

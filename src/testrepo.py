@@ -14,7 +14,9 @@ def load_test_repo(path):
         with open(path, encoding="utf-8") as repo_file:
             lines = repo_file.readlines()
     except OSError as error:
-        raise TestRepoError(f"Не удалось прочитать тестовый репозиторий: {error}")
+        raise TestRepoError(
+            f"Не удалось прочитать тестовый репозиторий: {error}"
+        )
     repo = {}
     for number, raw_line in enumerate(lines, start=1):
         line = raw_line.strip()
@@ -35,6 +37,7 @@ def parse_line(line, number):
     for item in [name] + dependencies:
         if not NAME_PATTERN.match(item):
             raise TestRepoError(
-                f"Строка {number}: имя '{item}' должно состоять из больших латинских букв"
+                f"Строка {number}: имя '{item}' должно состоять "
+                "из больших латинских букв"
             )
     return name, dependencies

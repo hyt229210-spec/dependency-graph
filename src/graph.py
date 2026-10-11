@@ -10,6 +10,7 @@ class GraphBuilder:
     """Строит граф зависимостей, обходя пакеты по уровням."""
 
     def __init__(self, get_dependencies, max_depth, substring):
+        """Запоминает настройки обхода и готовит пустой граф."""
         self.get_dependencies = get_dependencies
         self.max_depth = max_depth
         self.substring = substring
@@ -50,7 +51,7 @@ def build_graph(get_dependencies, root, max_depth, substring):
 
 
 def invert_repo(repo):
-    """Переворачивает репозиторий: пакет -> список пакетов, зависящих от него."""
+    """Переворачивает репозиторий: пакет -> пакеты, зависящие от него."""
     reverse = {name: [] for name in repo}
     for package, dependencies in repo.items():
         for dependency in dependencies:

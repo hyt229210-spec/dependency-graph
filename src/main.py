@@ -19,7 +19,9 @@ def parse_args():
         "--config", default="config.json", help="путь к JSON-файлу конфигурации"
     )
     parser.add_argument(
-        "--show-config", action="store_true", help="вывести параметры конфигурации"
+        "--show-config",
+        action="store_true",
+        help="вывести параметры конфигурации",
     )
     parser.add_argument(
         "--reverse",
@@ -27,13 +29,17 @@ def parse_args():
         help="вывести обратные зависимости (только для тестового режима)",
     )
     parser.add_argument(
-        "--image", action="store_true", help="построить и показать изображение графа"
+        "--image",
+        action="store_true",
+        help="построить и показать изображение графа",
     )
     parser.add_argument(
         "--jar", default="tools/plantuml.jar", help="путь к plantuml.jar"
     )
     parser.add_argument(
-        "--out", default="output/graph.puml", help="куда сохранить описание PlantUML"
+        "--out",
+        default="output/graph.puml",
+        help="куда сохранить описание PlantUML",
     )
     return parser.parse_args()
 
@@ -48,12 +54,13 @@ def print_settings(settings):
 def make_test_getter(settings, reverse):
     """Источник зависимостей для тестового режима - файл с графом.
 
-    При reverse вместо зависимостей возвращаются пакеты, которые зависят от данного.
+    При reverse возвращаются пакеты, которые зависят от данного.
     """
     repo = load_test_repo(settings["repository"])
     if settings["package_name"] not in repo:
         raise TestRepoError(
-            f"Пакет '{settings['package_name']}' не найден в тестовом репозитории"
+            f"Пакет '{settings['package_name']}' не найден "
+            "в тестовом репозитории"
         )
     if reverse:
         repo = invert_repo(repo)
@@ -69,6 +76,7 @@ def make_real_getter(settings):
     root = settings["package_name"]
 
     def getter(name):
+        """Зависимости пакета; чужие пакеты считаются листьями."""
         try:
             return find_direct_dependencies(repository, name)
         except PackageNotFound:
@@ -102,7 +110,7 @@ def run(settings, args):
 
 
 def print_result(graph, settings, reverse):
-    """Печатает граф зависимостей (или обратные зависимости) и, если нужно, дерево."""
+    """Печатает граф (или обратные зависимости) и, если нужно, дерево."""
     package = settings["package_name"]
     if reverse:
         print(f"Обратные зависимости пакета {package} (кто от него зависит):")

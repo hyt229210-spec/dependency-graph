@@ -5,7 +5,7 @@ import urllib.request
 
 try:
     import tomllib
-except ImportError:  # Python старше 3.11
+except ImportError:
     tomllib = None
 
 GITHUB_PREFIX = "https://github.com/"
@@ -31,7 +31,7 @@ def raw_url(repository, file_path):
     path = repository[len(GITHUB_PREFIX):].strip("/").removesuffix(".git")
     parts = path.split("/")
     if len(parts) < MIN_REPO_PARTS:
-        raise CargoError(f"Не удалось разобрать адрес репозитория: {repository}")
+        raise CargoError(f"Не удалось разобрать адрес: {repository}")
     return f"{RAW_HOST}/{parts[0]}/{parts[1]}/HEAD/{file_path}"
 
 
@@ -56,7 +56,9 @@ def fetch_text(url):
             return download(url)
         except OSError as error:
             last_error = error
-    raise CargoError(f"Нет доступа к сети (попыток: {RETRY_COUNT}): {last_error}")
+    raise CargoError(
+        f"Нет доступа к сети (попыток: {RETRY_COUNT}): {last_error}"
+    )
 
 
 def parse_manifest(text):
@@ -90,7 +92,7 @@ def candidate_paths(package_name):
 
 
 def find_direct_dependencies(repository, package_name):
-    """Ищет Cargo.toml пакета в репозитории и возвращает его прямые зависимости."""
+    """Ищет Cargo.toml пакета в репозитории, возвращает его зависимости."""
     for path in candidate_paths(package_name):
         text = fetch_text(raw_url(repository, path))
         if text is None:
@@ -98,4 +100,6 @@ def find_direct_dependencies(repository, package_name):
         manifest = parse_manifest(text)
         if manifest.get("package", {}).get("name") == package_name:
             return direct_dependencies(manifest)
-        raise PackageNotFound(f"Cargo.toml пакета '{package_name}' не найден в репозитории")
+        raise PackageNotFound(
+        f"Cargo.toml пакета '{package_name}' не найден в репозитории"
+    )

@@ -22,9 +22,12 @@ CASES = [
 
 def run_case(title, file_name, target, depth, substring):
     """Строит обратные зависимости для одного случая и печатает результат."""
-    print(f"\n=== {title} (пакет: {target}, глубина: {depth}, фильтр: '{substring}')")
+    print(f"\n=== {title} (пакет: {target}, глубина: {depth}, "
+          f"фильтр: '{substring}')")
     reverse = invert_repo(load_test_repo(DATA / file_name))
-    graph = build_graph(lambda name: reverse.get(name, []), target, depth, substring)
+    graph = build_graph(
+        lambda name: reverse.get(name, []), target, depth, substring
+    )
     for line in format_graph(graph, "<-", NOBODY):
         print("  " + line)
 

@@ -22,7 +22,8 @@ CASES = [
 
 def run_case(title, file_name, root, depth, substring):
     """Строит граф для одного случая и печатает результат."""
-    print(f"\n=== {title} (старт: {root}, глубина: {depth}, фильтр: '{substring}')")
+    print(f"\n=== {title} (старт: {root}, глубина: {depth}, "
+          f"фильтр: '{substring}')")
     try:
         repo = load_test_repo(DATA / file_name)
     except TestRepoError as error:

@@ -21,13 +21,18 @@ def to_plantuml(graph, reverse=False):
     nodes = collect_nodes(graph)
     root = next(iter(graph), None)
     ids = {name: f"n{index}" for index, name in enumerate(nodes)}
-    lines = ["@startuml", "skinparam shadowing false", "left to right direction"]
+    lines = [
+        "@startuml",
+        "skinparam shadowing false",
+        "left to right direction",
+    ]
     for name in nodes:
         color = f" {ROOT_COLOR}" if name == root else ""
         lines.append(f'rectangle "{name}" as {ids[name]}{color}')
     for package, dependencies in graph.items():
         for dependency in dependencies:
-            source, target = (dependency, package) if reverse else (package, dependency)
+            pair = (package, dependency)
+            source, target = pair[::-1] if reverse else pair
             lines.append(f"{ids[source]} --> {ids[target]}")
     lines.append("@enduml")
     return "\n".join(lines)

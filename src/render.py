@@ -20,10 +20,12 @@ def save_text(text, path):
 
 
 def render_png(puml_path, jar_path):
-    """Превращает .puml в .png программой PlantUML, возвращает путь к картинке."""
+    """Превращает .puml в .png через PlantUML, возвращает путь к картинке."""
     if not Path(jar_path).is_file():
         raise RenderError(f"Не найден файл PlantUML: {jar_path}")
-    command = ["java", "-jar", str(jar_path), "-charset", "UTF-8", str(puml_path)]
+    command = [
+        "java", "-jar", str(jar_path), "-charset", "UTF-8", str(puml_path)
+    ]
     try:
         result = subprocess.run(
             command,
