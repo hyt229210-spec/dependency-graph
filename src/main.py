@@ -4,7 +4,7 @@ import sys
 
 from cargo import CargoError, PackageNotFound, find_direct_dependencies
 from config import ConfigError, load_config
-from graph import build_graph, format_graph
+from graph import build_graph, format_graph, invert_repo
 from testrepo import TestRepoError, load_test_repo
 
 
@@ -19,6 +19,11 @@ def parse_args():
     parser.add_argument(
         "--show-config", action="store_true", help="вывести параметры конфигурации"
     )
+    parser.add_argument(
+        "--reverse",
+        action="store_true",
+        help="вывести обратные зависимости (только для тестового режима)",
+    )
     return parser.parse_args()
 
 
@@ -29,13 +34,18 @@ def print_settings(settings):
         print(f"  {key}: {value}")
 
 
-def make_test_getter(settings):
-    """Источник зависимостей для тестового режима - файл с графом."""
+def make_test_getter(settings, reverse):
+    """Источник зависимостей для тестового режима - файл с графом.
+
+    При reverse вместо зависимостей возвращаются пакеты, которые зависят от данного.
+    """
     repo = load_test_repo(settings["repository"])
     if settings["package_name"] not in repo:
         raise TestRepoError(
             f"Пакет '{settings['package_name']}' не найден в тестовом репозитории"
         )
+    if reverse:
+        repo = invert_repo(repo)
     return lambda name: repo.get(name, [])
 
 
@@ -58,10 +68,15 @@ def make_real_getter(settings):
     return getter
 
 
-def run(settings):
+def run(settings, reverse):
     """Строит граф по настройкам и печатает его."""
+    if reverse and not settings["test_mode"]:
+        raise ConfigError(
+            "Режим --reverse работает только при test_mode = true: "
+            "для настоящего репозитория нет списка всех пакетов"
+        )
     if settings["test_mode"]:
-        getter = make_test_getter(settings)
+        getter = make_test_getter(settings, reverse)
     else:
         getter = make_real_getter(settings)
     graph = build_graph(
@@ -70,8 +85,18 @@ def run(settings):
         settings["max_depth"],
         settings["filter_substring"],
     )
-    print(f"Граф зависимостей пакета {settings['package_name']}:")
-    for line in format_graph(graph):
+    print_result(graph, settings["package_name"], reverse)
+
+
+def print_result(graph, package, reverse):
+    """Печатает граф зависимостей или обратные зависимости."""
+    if reverse:
+        print(f"Обратные зависимости пакета {package} (кто от него зависит):")
+        lines = format_graph(graph, "<-", "(от него никто не зависит)")
+    else:
+        print(f"Граф зависимостей пакета {package}:")
+        lines = format_graph(graph)
+    for line in lines:
         print(f"  {line}")
 
 
@@ -82,7 +107,7 @@ def main():
         settings = load_config(args.config)
         if args.show_config:
             print_settings(settings)
-        run(settings)
+        run(settings, args.reverse)
     except ConfigError as error:
         print(f"Ошибка конфигурации: {error}")
         return 1

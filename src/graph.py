@@ -49,10 +49,19 @@ def build_graph(get_dependencies, root, max_depth, substring):
     return GraphBuilder(get_dependencies, max_depth, substring).build(root)
 
 
-def format_graph(graph):
+def invert_repo(repo):
+    """Переворачивает репозиторий: пакет -> список пакетов, зависящих от него."""
+    reverse = {name: [] for name in repo}
+    for package, dependencies in repo.items():
+        for dependency in dependencies:
+            reverse.setdefault(dependency, []).append(package)
+    return reverse
+
+
+def format_graph(graph, arrow="->", empty="(нет зависимостей)"):
     """Превращает граф в строки вида 'A -> B, C'."""
     lines = []
     for package, dependencies in graph.items():
-        targets = ", ".join(dependencies) if dependencies else "(нет зависимостей)"
-        lines.append(f"{package} -> {targets}")
+        targets = ", ".join(dependencies) if dependencies else empty
+        lines.append(f"{package} {arrow} {targets}")
     return lines
