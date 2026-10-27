@@ -1,38 +1,50 @@
-"""Получение прямых зависимостей пакета Rust (Cargo) из репозитория GitHub."""
-import urllib.error
+"""Получение прямых зависимостей пакета Rust (Cargo) из реестра пакетов.
+
+Реестр (например, https://index.crates.io) хранит о каждом пакете один
+текстовый файл: в каждой строке - JSON с описанием одной версии пакета,
+включая список её зависимостей. Адрес реестра берётся из конфигурации.
+"""
+import http.client
+import json
+import re
 import time
+import urllib.error
 import urllib.request
 
-try:
-    import tomllib
-except ImportError:
-    tomllib = None
-
-GITHUB_PREFIX = "https://github.com/"
-RAW_HOST = "https://raw.githubusercontent.com"
 TIMEOUT_SECONDS = 30
 RETRY_COUNT = 3
 RETRY_PAUSE_SECONDS = 2
 HTTP_NOT_FOUND = 404
-MIN_REPO_PARTS = 2
+SHORT_NAME_MAX = 2
+THREE_LETTER_NAME = 3
+PREFIX_LENGTH = 2
+NAME_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
+NORMAL_KINDS = (None, "normal")
 
 
 class CargoError(Exception):
     """Ошибка получения или разбора данных о пакете."""
 
+
 class PackageNotFound(CargoError):
-    """Пакета нет в этом репозитории."""
+    """Пакета нет в реестре."""
 
 
-def raw_url(repository, file_path):
-    """Строит ссылку на файл репозитория GitHub в «сыром» виде."""
-    if not repository.startswith(GITHUB_PREFIX):
-        raise CargoError("Поддерживаются только репозитории github.com")
-    path = repository[len(GITHUB_PREFIX):].strip("/").removesuffix(".git")
-    parts = path.split("/")
-    if len(parts) < MIN_REPO_PARTS:
-        raise CargoError(f"Не удалось разобрать адрес: {repository}")
-    return f"{RAW_HOST}/{parts[0]}/{parts[1]}/HEAD/{file_path}"
+def index_path(name):
+    """Путь к файлу пакета в индексе реестра (правило, принятое в Cargo)."""
+    lower = name.lower()
+    if len(lower) <= SHORT_NAME_MAX:
+        return f"{len(lower)}/{lower}"
+    if len(lower) == THREE_LETTER_NAME:
+        return f"{THREE_LETTER_NAME}/{lower[0]}/{lower}"
+    first = lower[:PREFIX_LENGTH]
+    second = lower[PREFIX_LENGTH:2 * PREFIX_LENGTH]
+    return f"{first}/{second}/{lower}"
+
+
+def package_url(registry, name):
+    """Адрес файла с описанием пакета в реестре."""
+    return f"{registry.rstrip('/')}/{index_path(name)}"
 
 
 def download(url):
@@ -54,52 +66,65 @@ def fetch_text(url):
             time.sleep(RETRY_PAUSE_SECONDS)
         try:
             return download(url)
-        except OSError as error:
+        except (OSError, http.client.HTTPException) as error:
             last_error = error
     raise CargoError(
         f"Нет доступа к сети (попыток: {RETRY_COUNT}): {last_error}"
     )
 
 
-def parse_manifest(text):
-    """Разбирает содержимое Cargo.toml в словарь."""
-    if tomllib is None:
-        raise CargoError("Нужен Python 3.11 или новее (модуль tomllib)")
-    try:
-        return tomllib.loads(text)
-    except tomllib.TOMLDecodeError as error:
-        raise CargoError(f"Не удалось разобрать Cargo.toml: {error}")
-
-
-def direct_dependencies(manifest):
-    """Возвращает имена из раздела [dependencies]."""
-    result = []
-    for key, value in manifest.get("dependencies", {}).items():
-        if isinstance(value, dict) and "package" in value:
-            result.append(value["package"])
-        else:
-            result.append(key)
-    return result
-
-
-def candidate_paths(package_name):
-    """Места, где в репозитории может лежать Cargo.toml нужного пакета."""
-    return [
-        "Cargo.toml",
-        f"{package_name}/Cargo.toml",
-        f"crates/{package_name}/Cargo.toml",
-    ]
-
-
-def find_direct_dependencies(repository, package_name):
-    """Ищет Cargo.toml пакета в репозитории, возвращает его зависимости."""
-    for path in candidate_paths(package_name):
-        text = fetch_text(raw_url(repository, path))
-        if text is None:
+def parse_entries(text):
+    """Разбирает файл пакета: возвращает список описаний его версий."""
+    entries = []
+    for line in text.splitlines():
+        if not line.strip():
             continue
-        manifest = parse_manifest(text)
-        if manifest.get("package", {}).get("name") == package_name:
-            return direct_dependencies(manifest)
-        raise PackageNotFound(
-        f"Cargo.toml пакета '{package_name}' не найден в репозитории"
+        try:
+            entries.append(json.loads(line))
+        except json.JSONDecodeError as error:
+            raise CargoError(f"Не удалось разобрать ответ реестра: {error}")
+    return entries
+
+
+def version_key(entry):
+    """Ключ для сравнения версий: стабильные версии выше пробных."""
+    core, dash, _ = entry["vers"].partition("+")[0].partition("-")
+    numbers = tuple(
+        int(part) if part.isdigit() else 0 for part in core.split(".")
     )
+    return (not dash, numbers)
+
+
+def latest_entry(entries):
+    """Выбирает самую новую версию, не отозванную автором (yanked)."""
+    available = [entry for entry in entries if not entry.get("yanked")]
+    return max(available or entries, key=version_key)
+
+
+def direct_dependencies(entry):
+    """Имена обычных зависимостей версии.
+
+    Пропускаются необязательные (optional), нужные только для разработки
+    (dev) или сборки (build), а также привязанные к платформе (target).
+    """
+    names = []
+    for dependency in entry.get("deps", []):
+        if dependency.get("kind") not in NORMAL_KINDS:
+            continue
+        if dependency.get("optional") or dependency.get("target"):
+            continue
+        name = dependency.get("package") or dependency["name"]
+        if name not in names:
+            names.append(name)
+    return names
+
+
+def find_direct_dependencies(registry, package_name):
+    """Возвращает прямые зависимости последней версии пакета из реестра."""
+    if not NAME_PATTERN.match(package_name):
+        raise CargoError(f"Недопустимое имя пакета: '{package_name}'")
+    text = fetch_text(package_url(registry, package_name))
+    entries = parse_entries(text) if text else []
+    if not entries:
+        raise PackageNotFound(f"Пакет '{package_name}' не найден в реестре")
+    return direct_dependencies(latest_entry(entries))
