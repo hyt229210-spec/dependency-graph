@@ -1,4 +1,7 @@
 """Построение графа зависимостей обходом в ширину (BFS) с рекурсией."""
+import sys
+
+RECURSION_LIMIT = 20000
 
 
 def is_excluded(name, substring):
@@ -7,7 +10,7 @@ def is_excluded(name, substring):
 
 
 class GraphBuilder:
-    """Строит граф зависимостей, обходя пакеты по уровням."""
+    """Строит граф зависимостей обходом в ширину: очередь и рекурсия."""
 
     def __init__(self, get_dependencies, max_depth, substring):
         """Запоминает настройки обхода и готовит пустой граф."""
@@ -19,23 +22,29 @@ class GraphBuilder:
 
     def build(self, root):
         """Возвращает словарь: пакет -> список его зависимостей."""
+        sys.setrecursionlimit(max(sys.getrecursionlimit(), RECURSION_LIMIT))
         self.seen.add(root)
-        self.visit_level([root], 0)
+        self.visit([(root, 0)])
         return self.graph
 
-    def visit_level(self, level, depth):
-        """Обрабатывает один уровень и рекурсивно переходит к следующему."""
-        if not level or depth >= self.max_depth:
+    def visit(self, queue):
+        """Обрабатывает первый пакет очереди и вызывает себя для остальных.
+
+        Зависимости пакета добавляются в конец очереди вместе с их глубиной.
+        Уже встреченные пакеты повторно не добавляются, поэтому циклы
+        не приводят к зависанию. Рекурсия заканчивается, когда очередь пуста.
+        """
+        if not queue:
             return
-        next_level = []
-        for package in level:
+        package, depth = queue.pop(0)
+        if depth < self.max_depth:
             dependencies = self.allowed_dependencies(package)
             self.graph[package] = dependencies
             for dependency in dependencies:
                 if dependency not in self.seen:
                     self.seen.add(dependency)
-                    next_level.append(dependency)
-        self.visit_level(next_level, depth + 1)
+                    queue.append((dependency, depth + 1))
+        self.visit(queue)
 
     def allowed_dependencies(self, package):
         """Зависимости пакета без тех, что отсеяны фильтром."""
